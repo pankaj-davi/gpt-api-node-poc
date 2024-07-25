@@ -4,7 +4,7 @@ const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
-const port = 8080;
+const port = process.env.PORT;
 
 app.use(cors());
 app.use(express.json());
@@ -82,6 +82,5 @@ app.post('/ask', (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log('API Key:', process.env.OPENAI_API_KEY);
     console.log(`Server running at http://localhost:${port}`);
 });
