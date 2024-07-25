@@ -64,7 +64,7 @@ export default function Home() {
     const newConversation = { question: input, response: '' };
     setConversations([...conversations, newConversation]);
 
-    const response = await fetch('http://localhost:8080/ask', {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/ask`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
