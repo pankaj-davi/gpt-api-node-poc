@@ -1,14 +1,15 @@
-const { OpenAI } = require('openai');
-const readline = require('readline');
+const express = require('express');
+const cors = require('cors');
 const axios = require('axios');
 require('dotenv').config();
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+const app = express();
+const port = 8080;
 
+app.use(cors());
+app.use(express.json());
 
-async function streamCompletion(model, prompt, max_tokens, temperature) {
+async function streamCompletion(model, prompt, max_tokens, temperature, res) {
     try {
         const response = await axios.post(
             'https://api.openai.com/v1/chat/completions',
@@ -41,14 +42,13 @@ async function streamCompletion(model, prompt, max_tokens, temperature) {
                     const jsonStr = line.slice(5).trim();
                     
                     try {
-                       
                         let message;
                         accumulatedData += jsonStr;
                         while (accumulatedData.length > 0) {
                             try {
                                 message = JSON.parse(accumulatedData);
                                 if (message.choices && message.choices[0] && message.choices[0].delta) {
-                                    process.stdout.write(message.choices[0].delta.content || '');
+                                    res.write(message.choices[0].delta.content || '');
                                 }
                                 accumulatedData = '';
                             } catch (e) {
@@ -63,28 +63,25 @@ async function streamCompletion(model, prompt, max_tokens, temperature) {
         });
 
         response.data.on('end', () => {
-            console.log('\nStream completed.');
+            res.end();
         });
 
     } catch (error) {
         console.error('Error during streaming:', error.message);
+        res.status(500).send('Error during streaming');
     }
 }
 
+app.post('/ask', (req, res) => {
+    const { question } = req.body;
+    if (!question) {
+        return res.status(400).send('Question is required');
+    }
+    res.setHeader('Content-Type', 'text/plain');
+    streamCompletion('gpt-3.5-turbo', question, 1550, 0.7, res);
+});
 
-
-async function askQuestion() {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-    });
-
-    rl.question('Ask a question: ', async (question) => {
-        console.log('Response:');
-        await streamCompletion('gpt-3.5-turbo', question, 1550, 0.7);
-        rl.close();
-    });
-}
-
-// Run the function
-askQuestion();
+app.listen(port, () => {
+    console.log('API Key:', process.env.OPENAI_API_KEY);
+    console.log(`Server running at http://localhost:${port}`);
+});
