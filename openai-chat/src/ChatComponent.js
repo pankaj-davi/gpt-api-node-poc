@@ -71,7 +71,7 @@ export default function Home() {
     }
 
     setIsStreaming(true);
-    eventSourceRef.current = new EventSource(`http://localhost:8080/ask?question=${encodeURIComponent(input)}`, {
+    eventSourceRef.current = new EventSource(`${process.env.REACT_APP_API_URL}/ask?question=${encodeURIComponent(input)}`, {
     withCredentials: true
 });
 
@@ -120,6 +120,7 @@ export default function Home() {
 
   return (
     <main style={containerStyle}>
+      {"pankaj deply test 2 with streaming "}
       <p>Ask a question:</p>
       <input
         type="text"
