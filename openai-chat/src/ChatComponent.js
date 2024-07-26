@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 
 const containerStyle = {
   display: 'flex',
@@ -54,6 +54,8 @@ export default function Home() {
   const [input, setInput] = useState('');
   const [conversations, setConversations] = useState([]);
   const [hover, setHover] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const eventSourceRef = useRef(null);
 
   const handleClick = async () => {
     if (!input.trim()) {
@@ -64,41 +66,60 @@ export default function Home() {
     const newConversation = { question: input, response: '' };
     setConversations([...conversations, newConversation]);
 
-    const response = await fetch(`${process.env.REACT_APP_API_URL}/ask`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ question: input }),
-    });
-
-    if (!response.ok) {
-      console.error('Network response was not ok');
-      return;
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
     }
 
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    setIsStreaming(true);
+    eventSourceRef.current = new EventSource(`http://localhost:8080/ask?question=${encodeURIComponent(input)}`, {
+    withCredentials: true
+});
 
-    let responseText = '';
-    while (true) {
-      const { value: chunk, done } = await reader.read();
-      if (done) break;
-      console.log('Received: ', chunk);
-      responseText += chunk;
-      setConversations((prevConversations) =>
-        prevConversations.map((conv, index) =>
-          index === prevConversations.length - 1
-            ? { ...conv, response: responseText }
-            : conv
-        )
-      );
+    
+
+  eventSourceRef.current.onmessage = (event) => {
+    const data = event.data;
+
+    if (data === '[DONE]') {
+        eventSourceRef.current.close();
+        setIsStreaming(false);
+        return;
     }
+
+    try {
+        const jsonData = JSON.parse(data);
+        const content = jsonData.content || '';
+
+        setConversations((prevConversations) =>
+            prevConversations.map((conv, index) =>
+                index === prevConversations.length - 1
+                    ? { ...conv, response: conv.response + content }
+                    : conv
+            )
+        );
+    } catch (error) {
+        console.error('Error parsing JSON:', error.message);
+    }
+};
+
+    eventSourceRef.current.onerror = (error) => {
+      console.error('EventSource failed:', error);
+      eventSourceRef.current.close();
+      setIsStreaming(false);
+    };
+
     setInput(''); // Clear the input after submitting
+  };
+
+  const handleStop = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+    setIsStreaming(false);
   };
 
   return (
     <main style={containerStyle}>
-      {"pankaj gptTest"}
       <p>Ask a question:</p>
       <input
         type="text"
@@ -115,6 +136,16 @@ export default function Home() {
       >
         Submit
       </button>
+      {isStreaming && (
+        <button
+          onClick={handleStop}
+          style={hover ? { ...buttonStyle, ...buttonHoverStyle } : buttonStyle}
+          onMouseEnter={() => setHover(true)}
+          onMouseLeave={() => setHover(false)}
+        >
+          Stop
+        </button>
+      )}
       <div style={conversationStyle}>
         {conversations.map((conv, index) => (
           <div key={index} style={{ marginBottom: '10px' }}>

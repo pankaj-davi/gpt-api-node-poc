@@ -4,9 +4,15 @@ const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT;
+const port = process.env.PORT || 8080;
 
-app.use(cors());
+app.use(cors({
+    origin: process.env.ORIGIN,
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type'],
+    credentials: true,
+}));
+
 app.use(express.json());
 
 async function streamCompletion(model, prompt, max_tokens, temperature, res) {
@@ -18,19 +24,22 @@ async function streamCompletion(model, prompt, max_tokens, temperature, res) {
                 messages: [{ role: 'user', content: prompt }],
                 max_tokens: max_tokens,
                 temperature: temperature,
-                stream: true
+                stream: true,
             },
             {
                 headers: {
                     'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
                 },
-                responseType: 'stream'
+                responseType: 'stream',
             }
         );
 
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
         let buffer = '';
-        let accumulatedData = '';
 
         response.data.on('data', chunk => {
             buffer += chunk.toString();
@@ -40,20 +49,17 @@ async function streamCompletion(model, prompt, max_tokens, temperature, res) {
             for (const line of lines) {
                 if (line.startsWith('data:')) {
                     const jsonStr = line.slice(5).trim();
-                    
+
+                    if (jsonStr === '[DONE]') {
+                        res.write('data: [DONE]\n\n');
+                        res.end();
+                        return;
+                    }
+
                     try {
-                        let message;
-                        accumulatedData += jsonStr;
-                        while (accumulatedData.length > 0) {
-                            try {
-                                message = JSON.parse(accumulatedData);
-                                if (message.choices && message.choices[0] && message.choices[0].delta) {
-                                    res.write(message.choices[0].delta.content || '');
-                                }
-                                accumulatedData = '';
-                            } catch (e) {
-                                break;
-                            }
+                        const message = JSON.parse(jsonStr);
+                        if (message.choices && message.choices[0] && message.choices[0].delta) {
+                            res.write(`data: ${JSON.stringify(message.choices[0].delta)}\n\n`);
                         }
                     } catch (err) {
                         console.error('Error parsing JSON:', err.message);
@@ -72,12 +78,13 @@ async function streamCompletion(model, prompt, max_tokens, temperature, res) {
     }
 }
 
-app.post('/ask', (req, res) => {
-    const { question } = req.body;
+
+app.get('/ask', (req, res) => {
+    console.log('GET /ask called');
+    const question = req.query.question;
     if (!question) {
         return res.status(400).send('Question is required');
     }
-    res.setHeader('Content-Type', 'text/plain');
     streamCompletion('gpt-3.5-turbo', question, 1550, 0.7, res);
 });
 
