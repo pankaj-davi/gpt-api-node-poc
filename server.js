@@ -18,6 +18,12 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 8080;
 
+// Ensure the uploads directory exists
+const uploadDir = 'uploads';
+if (!fs.existsSync(uploadDir)){
+    fs.mkdirSync(uploadDir);
+}
+
 // Set up CORS
 app.use(cors({
     origin: process.env.ORIGIN,
@@ -29,7 +35,7 @@ app.use(cors({
 // Set up multer for file uploads
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/'); // Destination folder for file uploads
+        cb(null, uploadDir); // Destination folder for file uploads
     },
     filename: (req, file, cb) => {
         cb(null, file.fieldname + '-' + Date.now() + path.extname(file.originalname));
@@ -159,7 +165,10 @@ async function processJson(filePath) {
 // Function to process ZIP files (extract and process contained files)
 async function processZip(filePath) {
     try {
-        const tempDir = path.join('uploads', 'temp');
+        const tempDir = path.join(uploadDir, 'temp');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir);
+        }
         await extract(filePath, { dir: tempDir });
 
         const files = fs.readdirSync(tempDir);
@@ -286,23 +295,28 @@ app.post('/upload1', upload.single('document'), async (req, res) => {
         let prompt;
 
         if (file) {
-            // Determine file type and process accordingly
             const fileType = file.mimetype;
             const filePath = file.path;
 
-            // Process the file and get its text content
+            // Check if file exists
+            if (!fs.existsSync(filePath)) {
+                throw new Error('File does not exist.');
+            }
+
             const fileContent = await processFile(filePath, fileType);
             if (!fileContent) {
                 return res.status(500).send('Error processing file.');
             }
 
-            // Form the prompt with the extracted text
             prompt = `The document content is:\n${fileContent}\n\nThe question is: ${question}`;
 
-            // Clean up the temporary file
-            fs.unlinkSync(filePath);
+            // Attempt to delete file
+            try {
+                fs.unlinkSync(filePath);
+            } catch (error) {
+                console.error('Error deleting file:', error.message);
+            }
         } else {
-            // Form the prompt without file content
             prompt = `The question is: ${question}`;
         }
 
@@ -317,7 +331,7 @@ app.post('/upload1', upload.single('document'), async (req, res) => {
 });
 
 // Test endpoint
-app.use('/pankaj', (req, res) => res.json({ Test: "app running" }));
+app.use('/pankaj', (req, res) => res.json({ Test: "app running2" }));
 
 app.listen(port, () => {
     console.log(`Server running at http://localhost:${port}`);
