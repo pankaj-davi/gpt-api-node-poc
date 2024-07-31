@@ -287,7 +287,10 @@ export default function Home() {
   };
 
   return (
-    <main style={containerStyle}>
+    <main style={containerStyle}> 
+      <p
+     style={{color:"red"}}
+    >{"only Allow application/pdf, application/vnd.openxmlformats-officedocument.wordprocessingml.document, application/msword, text/plain, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, text/csv, text/html, application/epub+zip, application/json, application/zip"}</p>
       {!pdfFile ? (
         <>
           <button
